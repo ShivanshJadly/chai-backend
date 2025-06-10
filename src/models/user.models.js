@@ -56,13 +56,13 @@ userSchema.pre("save", async function (next){
 })
 
 // This is how we can make our own methods
-userSchema.methods.isPasswordCorrect( async function (password) {
+userSchema.methods.isPasswordCorrect =  async function (password) {
 
     return await bcrypt.compare(password, this.password)
-})
+};
 
 // Access token and Refresh token have no significant difference, but how we use them thats what make them different
-userSchema.methods.generateAccessToken( function () {
+userSchema.methods.generateAccessToken = function () {
     return jwt.sign(
         {
             _id: this._id,
@@ -75,8 +75,9 @@ userSchema.methods.generateAccessToken( function () {
             expiresIn: process.env.ACCESS_TOKEN_EXPIRY
         }
     )
-})
-userSchema.methods.generateRefreshToken( async function () {
+};
+
+userSchema.methods.generateRefreshToken = async function () {
     return jwt.sign(
         {
             _id: this._id
@@ -86,6 +87,6 @@ userSchema.methods.generateRefreshToken( async function () {
             expiresIn: process.env.REFRESH_TOKEN_EXPIRY
         }
     )
-})
+};
 
 export const User = mongoose.model("User",userSchema);
