@@ -38,6 +38,6 @@ const videoSchema = new Schema({
 
 },{timestamps:true})
 
-videoSchema.plugin(mongooseAggregatePaginate); // now we can write aggregation queries that actually level up things for us
+videoSchema.plugin(mongooseAggregatePaginate); // now we can write aggregation queries that actually level up our project
 
 export const Video = mongoose.model("Video",videoSchema);
