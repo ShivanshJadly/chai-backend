@@ -62,6 +62,9 @@ userSchema.methods.isPasswordCorrect =  async function (password) {
 };
 
 // Access token and Refresh token have no significant difference, but how we use them thats what make them different
+
+// Access token are short lived than refresh token, this is done for example, like if we want only authorized user to upload files but for security reasons we have 15min expiry for access token, so here comes the use of refresh token where it helps to avoid the user to login again. It matches the refresh token that we have to the refresh token in the database.
+
 userSchema.methods.generateAccessToken = function () {
     return jwt.sign(
         {
@@ -77,7 +80,7 @@ userSchema.methods.generateAccessToken = function () {
     )
 };
 
-userSchema.methods.generateRefreshToken = async function () {
+userSchema.methods.generateRefreshToken = function () {
     return jwt.sign(
         {
             _id: this._id

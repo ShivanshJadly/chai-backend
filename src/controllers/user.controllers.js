@@ -4,6 +4,25 @@ import {User} from "../models/user.models.js";
 import { uploadCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 
+
+const generateAccessAndRefreshToken = async (userId) => {
+    try {
+
+        const user = await User.findOne(userId);
+        const accessToken = user.generateAccessToken();
+        const refreshToken = user.generateRefreshToken();
+
+        user.refreshToken = refreshToken;
+        // validateBeforeSave parameter is added in save otherwise it will check user model all validation like required true fields of others(like password)
+        await user.save({ validateBeforeSave: false });
+
+        return { accessToken, refreshToken };
+
+    } catch (error) {
+        throw new ApiError(500, "Something went wrong while generating refresh token and access token.")
+    }
+}  
+
 const registerUser = asyncHandler ( async (req, res) =>{
     // get user details from frontend
     // validate - not empty
@@ -18,6 +37,7 @@ const registerUser = asyncHandler ( async (req, res) =>{
 
     // Note: This is "destructure syntax" from js
     const {fullName, username, email, password} = req.body;
+    // console.log("req.body: ",req.body);
 
     // Read about this validation way, about some and overall how this code works
     if(
@@ -26,8 +46,8 @@ const registerUser = asyncHandler ( async (req, res) =>{
         throw new ApiError(400, "All field are required.");
     }
 
-    const existedUser = User.findOne({
-        // $ makes us use all the operators functionality in this
+    const existedUser = await User.findOne({
+        // $or , $and --> are mongodb operators
         $or: [{ username },{ email }]
     });
 
@@ -35,19 +55,27 @@ const registerUser = asyncHandler ( async (req, res) =>{
         throw new ApiError(409, "User with email or username already exists.")
     }
 
+
+    // console.log("req.files: ",req.files);
     // This files is available because of "multer", like how req.body is given by express
     const avatarLocalPath = req.files?.avatar[0]?.path; // Local path isliye bola kyuki ye abhi server pe hai and cloudinary pe abhi nhi gya hai
-    console.log("Avatar Local Path: ",avatarLocalPath);
+    // console.log("Avatar Local Path: ",avatarLocalPath);
 
-    const coverImageLocalPath = req.files?.coverImage[0]?.path;
-    console.log("CoverImage Local Path: ",coverImageLocalPath);
+    // const coverImageLocalPath = req.files?.coverImage[0]?.path; // this is giving error when not giving coverImage
+    // console.log("CoverImage Local Path: ",coverImageLocalPath);
+
+    let coverImageLocalPath;
+
+    if(req.files && Array.isArray(req.files.coverImage) && req.files.coverImage.length>0){
+        coverImageLocalPath = req.files.coverImage[0].path;
+    }
 
     if( !avatarLocalPath ){
         throw new ApiError(400, "Avatar file is required.")
     }
 
     const avatar = await uploadCloudinary(avatarLocalPath);
-    const coverImage = await uploadCloudinary(coverImageLocalPath);
+    const coverImage = await uploadCloudinary(coverImageLocalPath); 
 
     if( !avatar ){
         throw new ApiError(400, "Avatar file is required.")
@@ -68,7 +96,8 @@ const registerUser = asyncHandler ( async (req, res) =>{
         "-password -refreshToken"
     );
 
-    if(createdUser){
+
+    if( !createdUser ){
         throw new ApiError(500,"Something went wrong while registring the user.");
     }
 
@@ -78,4 +107,102 @@ const registerUser = asyncHandler ( async (req, res) =>{
 
 })
 
-export {registerUser}
+const loginUser = asyncHandler( async ( req, res ) =>{
+    // req body -> data
+    // username or email
+    // find the user
+    // password check
+    // access token and refresh token
+    // send cookie
+
+    const {username, email, password} = req.body;
+
+    if(!username && !email){
+        throw new ApiError(400, "username or email is required.")
+    }
+    if( !password ){
+        throw new ApiError(400, "password is required.")
+    }
+
+    const user = await User.findOne({
+        $or: [{username}, {email}]
+    })
+
+    if( !user ){
+        throw new ApiError(404,"User does not exists.");
+    }
+
+    // here, we will not use "User" because this comes from mongodb, and we cannot apply our functions like isPasswordCorrect, generateAccessToken
+
+    const isPasswordValid = await user.isPasswordCorrect(password);
+
+    if( !isPasswordValid ){
+        throw new ApiError(401,"Invalid user credentials");
+    }
+
+    const { accessToken, refreshToken } = await generateAccessAndRefreshToken(user._id);
+
+    // optional step: this is the data that we will share with the user
+    const loggedinUser = await User.findOne(user._id).select( " -password -refreshToken ");
+
+    // cookies require options, the below option provided makes cookie only modifiable by the server and cannot be done from frontend
+    const options = {
+        httpOnly: true,
+        secure: true
+    }
+
+    return res.status(200)
+    .cookie( "accessToken", accessToken, options )
+    .cookie( "refreshToken", refreshToken, options )
+    .json(
+        new ApiResponse(
+            200,
+            {
+                user: loggedinUser, 
+                accessToken, 
+                refreshToken
+
+            },
+            "User logged in Successfully."
+        )
+    )
+})
+
+const logoutUser = asyncHandler( async ( req,res ) =>{
+    // cookies remove
+    // accessToken, refreshToken remove
+    // ye above task ker ne ke liye humare pass user ka hona zaruri hai jo abhi humare pass nhi hai
+
+    // to solve above problem we created auth middleware and thats how we can access req.user
+
+    await User.findByIdAndUpdate(
+        req.user._id,
+        {
+            $set:{
+                refreshToken: undefined
+            }
+        },
+        {
+            new: true
+        }
+    )
+
+    const options = {
+        httpOnly: true,
+        secure: true
+    }
+
+    return res.status(200)
+    .clearCookie("accessToken", options)
+    .clearCookie("refreshToken", options)
+    .json(
+        new ApiResponse(200, {}, "User logged out successfully.")
+    );
+
+})
+
+export {
+    registerUser,
+    loginUser,
+    logoutUser
+}
