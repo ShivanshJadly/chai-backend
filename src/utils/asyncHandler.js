@@ -5,6 +5,10 @@ const asyncHandler = (requestHandler)=>{
     }
 }
 
+// If you call next() with no arguments, Express will move to the next middleware in the chain.
+
+// If you call next(err) with an error, Express will skip all remaining non-error-handling middleware and go straight to the error-handling middleware
+
 // Higher order function ----> JS topic
 // const asyncHandler = (fn) => async(req,res,next) =>{
 //     try {
